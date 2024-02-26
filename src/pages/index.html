@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <link rel="stylesheet" href="../styles/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+</head>
+<body>
+    <div>
+        <ul class="field is-grouped">
+            <li class="control">
+                <input class="input is-primary" type="text" id="path-input">
+            </li>
+            <li>
+                <button class="button is-size" id="openDirectoryDialogue">Choose</button>
+            </li>
+        </ul>
+        <p class="has-text">The app is hosted on "<a id="port-display"></a>"</p>
+    </div>
+
+    <script defer src="../render.js"></script>
+</body>
+</html>
