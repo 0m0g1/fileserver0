@@ -33,3 +33,13 @@ ul li:nth-child(1) input {
     width: 100%;
     height: 70%;
 }
+
+.dark-mode {
+    background-color: #1a1a1a;
+    color: #ffffff;
+}
+
+.light-mode {
+    background-color: #ffffff;
+    color: #1a1a1a;
+}
