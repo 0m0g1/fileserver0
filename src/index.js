@@ -2,7 +2,7 @@ const fs = require("fs");
 const os = require("os");
 const express = require("express");
 const path = require("path");
-const {app, BrowserWindow, ipcMain, dialog, Menu, nativeTheme} = require("electron");
+const {app, BrowserWindow, ipcMain, dialog, Menu, nativeTheme, shell} = require("electron");
 
 const serverAPI = express();
 serverAPI.set("view engine", "ejs");
@@ -12,13 +12,18 @@ let mainWindow;
 
 const createNewWindow = () => {
     mainWindow = new BrowserWindow({
-        width: 800,
-        height: 600,
+        width: 667,
+        height: 500,
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false
-        }
+        },
+        icon: path.join(__dirname, "assets", "icon.png")
     });
+
+    mainWindow.webContents.on("dom-ready", () => {
+        mainWindow.webContents.send("change-theme", configs.theme);
+    })
 
     ipcMain.on("open-directory", (event) => {
         dialog.showOpenDialog({
@@ -84,7 +89,16 @@ async function startSever(dir) {
             }
             
             server = serverAPI.listen(port, () => {
-                configs["recently-opened"].push(dir);
+                const index = configs["recently-opened"].indexOf(dir);
+
+                if (configs["recently-opened"].length == 10) {
+                    configs["recently-opened"].pop();
+                }
+
+                if (index !== -1) {
+                    configs["recently-opened"].pop(index);
+                }
+                configs["recently-opened"].unshift(dir);
                 saveConfigs(configs);
                 console.log(`Server is running on "http://localhost:${port}/`)
             })
@@ -119,7 +133,6 @@ async function startSever(dir) {
                 
             })
 
-
             return port;
         })
         .catch((err) => {
@@ -129,6 +142,7 @@ async function startSever(dir) {
 
 function closeServer() {
     if (server) {
+        mainWindow.webContents.send("database-closed");
         server.close();
     }
 }
@@ -160,7 +174,7 @@ function getRecentlyOpenedDirectories() {
             label: path,
             click: () => {
                 startSever(path);
-                ipcMain.webContents.send("opened-directory", {port:port, path: path, ip: getIPAddress()})
+                mainWindow.webContents.send("opened-directory", {port:port, path: path, ip: getIPAddress()})
             }
         })
     })
@@ -170,7 +184,6 @@ function getRecentlyOpenedDirectories() {
 
 app.on("ready", () => {
     createNewWindow();
-
 
     nativeTheme.themeSource = configs.theme;
     mainWindow.webContents.send("change-theme", configs.theme);
@@ -212,6 +225,17 @@ app.on("ready", () => {
                         nativeTheme.themeSource = "dark";
                         configs.theme = "dark";
                         saveConfigs(configs);
+                    }
+                }
+            ]
+        },
+        {
+            label: "Help",
+            submenu: [
+                {
+                    label: "About",
+                    click: () => {
+                        shell.openExternal("https://github.com/0m0g1/fileserver");
                     }
                 }
             ]

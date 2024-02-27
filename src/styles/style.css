@@ -4,6 +4,11 @@
     box-sizing: border-box;
     padding: 0;
     margin: 0;
+    overflow: hidden;
+}
+
+*::-webkit-scrollbar {
+    display: none;
 }
 
 body {
@@ -12,11 +17,28 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
+    overflow: hidden;
 }
 
 body> div {
     display: flex;
     flex-direction: column;
+}
+
+#loader {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: white;
+    position: absolute;
+    z-index: 1;
+}
+
+#loader img {
+    width: 40%;
+    aspect-ratio: 1;
 }
 
 ul li {
@@ -34,12 +56,12 @@ ul li:nth-child(1) input {
     height: 70%;
 }
 
-.dark-mode {
+.dark {
     background-color: #1a1a1a;
     color: #ffffff;
 }
 
-.light-mode {
+.light {
     background-color: #ffffff;
     color: #1a1a1a;
 }
