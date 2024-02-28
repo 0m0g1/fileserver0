@@ -4,8 +4,9 @@ const express = require("express");
 const path = require("path");
 const {app, BrowserWindow, ipcMain, dialog, Menu, nativeTheme, shell} = require("electron");
 
-const configs = loadConfigs();
+const configs =  loadConfigs();
 const serverAPI = express();
+serverAPI.set("views", path.join(__dirname, "views"));
 serverAPI.set("view engine", "ejs");
 const networkingInterfaces = os.networkInterfaces();
 
@@ -36,7 +37,7 @@ const createNewWindow = () => {
         .then( async (paths) => {
             if (!paths.canceled) {
                 const path = paths.filePaths[0];
-                const port = await startSever(path);
+                const port = await startServer(path);
                 const IP = getIPAddress();
 
                 event.sender.send("opened-directory", {port:port, path: path, ip: IP});
@@ -69,7 +70,7 @@ const createNewWindow = () => {
         
         const path = configs["recently-opened"][0];
         
-        startSever(path)
+        startServer(path)
         .then((port) => {
             const ip = getIPAddress();
             mainWindow.webContents.send("opened-directory", {port:port, path: path, ip: ip});
@@ -143,7 +144,7 @@ function readDir(dir) {
 
 let server;
 
-async function startSever(dir) {
+async function startServer(dir) {
     return readDir(dir)
         .then((subdirectories) => {
             const port = process.env.PORT || configs.port;
@@ -178,9 +179,14 @@ async function startSever(dir) {
                 console.log(`Server is running on "http://localhost:${port}/`)
             })
 
+            serverAPI.get("*/favicon.ico", (req, res) => {
+                res.sendFile(path.join(__dirname, "assets", "favicon.ico"));
+            })
+
             serverAPI.get("/:path(*)", (req, res) => {
-                console.log(`accessed:${req.params.path}`)
-                const requestedPath = path.join(dir, req.params.path);
+                
+                let requestedPath = path.join(dir, req.params.path);
+
                 fs.stat(requestedPath, async (err, stats) => {
                     if (err) {
                         showErrorMessage({
@@ -232,7 +238,11 @@ function closeServer() {
 function loadConfigs() {
     try {
         const configurations = fs.readFileSync(path.join(__dirname, "configs.json"));
-        return JSON.parse(configurations);
+        const loadedConfigs = JSON.parse(configurations);
+        if (!loadedConfigs.hasOwnProperty("recently-opened")) {
+            loadedConfigs["recently-opened"] = [];
+        }
+        return loadedConfigs;
     } catch (error) {
         showErrorMessage({
             title: "Error",
@@ -243,7 +253,8 @@ function loadConfigs() {
 
 function saveConfigs() {
     try {
-        fs.writeFileSync("configs.json", JSON.stringify(configs, null, 4), "utf-8");
+        const configsFilePath = path.join(__dirname, "configs.json");
+        fs.writeFileSync(configsFilePath, JSON.stringify(configs, null, 2), "utf-8");
     } catch (error) {
         showErrorMessage({
             title: "Error",
@@ -258,7 +269,7 @@ function getRecentlyOpenedDirectories() {
         items.push({
             label: path,
             click: async () => {
-                const port = await startSever(path);
+                const port = await startServer(path);
                 const serializedData = {
                     port: port,
                     path: path,
