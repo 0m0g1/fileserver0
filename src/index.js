@@ -4,9 +4,12 @@ const express = require("express");
 const path = require("path");
 const {app, BrowserWindow, ipcMain, dialog, Menu, nativeTheme, shell} = require("electron");
 
+const configs = loadConfigs();
 const serverAPI = express();
 serverAPI.set("view engine", "ejs");
 const networkingInterfaces = os.networkInterfaces();
+
+let isServing = false;
 
 let mainWindow;
 
@@ -14,6 +17,7 @@ const createNewWindow = () => {
     mainWindow = new BrowserWindow({
         width: 667,
         height: 500,
+        resizable: false,
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false
@@ -39,8 +43,45 @@ const createNewWindow = () => {
             }
         })
         .catch((err) => {
-            console.error(`There was an error opening the file dialogue: ${err}`);
+            showErrorMessage({
+                title: "Error",
+                message: `There was an error opening the file dialogue: ${err}`
+            })
         })
+    })
+
+    ipcMain.on("port-inputed", async (event, newPort) => {
+        if (!isPureDigits(newPort)) {
+            showErrorMessage({title:"error", message: `There can be no digits in port numbers: ${newPort}`});
+            return;
+        }
+        
+        configs.port = newPort;
+
+        saveConfigs();
+
+        showSuccessMessage({
+            title: "Success",
+            message: `Successfully changed port to ${configs.port}`
+        });
+
+        if (!isServing) return;
+        
+        const path = configs["recently-opened"][0];
+        
+        startSever(path)
+        .then((port) => {
+            const ip = getIPAddress();
+            mainWindow.webContents.send("opened-directory", {port:port, path: path, ip: ip});
+        })
+        .catch((err) => {
+            console.error(`There was an error starting the server: ${err}`);
+            showErrorMessage({
+                title: "Error",
+                message: `There was an error starting the server: ${err}`
+            });
+        })
+
     })
 
     mainWindow.loadFile(path.join(__dirname, "views", "index.html"));
@@ -58,13 +99,44 @@ function getIPAddress() {
     return null;
 }
 
+function showSuccessMessage(message) {
+    dialog.showMessageBox({
+        title: message.title,
+        message: message.message
+    })
+}
+
+function showErrorMessage(message) {
+    dialog.showErrorBox(message.title, message.message)
+}
+
+
 function readDir(dir) {
     return new Promise((resolve, reject) => {
-        fs.readdir(dir, (err, directories) => {
+        fs.stat(dir, (err, status) => {
             if (err) {
                 reject(err);
+            
+            } else {
+                if (status.isDirectory()) {
+                    fs.readdir(dir, (err, directories) => {
+                        if (err) {
+                            reject(err);
+                        }
+                        resolve(directories)
+                    })
+                } else if (status.isFile()) {
+                    fs.readFile(dir, (err, data) => {
+                        if (err) {
+                            reject(err);
+                        }
+                        resolve(data);
+                    })
+                } else {
+                    reject(`${dir} is neither a file nor a directory`);
+                }
             }
-            resolve(directories)
+
         })
     })
 }
@@ -74,7 +146,7 @@ let server;
 async function startSever(dir) {
     return readDir(dir)
         .then((subdirectories) => {
-            const port = process.env.PORT || 8080;
+            const port = process.env.PORT || configs.port;
             
             serverAPI.get("/", (req, res) => {
                 const formattedSubdirectories = subdirectories.map(subdirectory => ({
@@ -89,17 +161,20 @@ async function startSever(dir) {
             }
             
             server = serverAPI.listen(port, () => {
-                const index = configs["recently-opened"].indexOf(dir);
+                configs["recently-opened"].forEach((recent, i) => {
+                    if (dir === recent) {
+                        configs["recently-opened"].splice(i, 1);
+                    }
+                })
 
-                if (configs["recently-opened"].length == 10) {
+                if (configs["recently-opened"].length === 10) {
                     configs["recently-opened"].pop();
                 }
 
-                if (index !== -1) {
-                    configs["recently-opened"].pop(index);
-                }
                 configs["recently-opened"].unshift(dir);
-                saveConfigs(configs);
+                saveConfigs();
+                makeMainMenu();
+                isServing = true;
                 console.log(`Server is running on "http://localhost:${port}/`)
             })
 
@@ -108,7 +183,10 @@ async function startSever(dir) {
                 const requestedPath = path.join(dir, req.params.path);
                 fs.stat(requestedPath, async (err, stats) => {
                     if (err) {
-                        console.error(`Error checking the stats of ${requestedPath}: ${err}`);
+                        showErrorMessage({
+                            title: "Error",
+                            message: `Error checking the stats of ${requestedPath}: ${err}`
+                        });
                         res.status(500).send(`
                                                 Internal Server Error </br>
                                                 Error checking the stats of ${requestedPath}: ${err}
@@ -136,7 +214,10 @@ async function startSever(dir) {
             return port;
         })
         .catch((err) => {
-            console.error(`There was an error reading "${dir}: ${err}`);
+            showErrorMessage({
+                title: "Error",
+                message: `There was an error reading "${dir}: ${err}`
+            });
         })
 }
 
@@ -144,50 +225,84 @@ function closeServer() {
     if (server) {
         mainWindow.webContents.send("database-closed");
         server.close();
+        isServing = false;
     }
 }
 
 function loadConfigs() {
     try {
-        const configurations = fs.readFileSync("configs.json");
+        const configurations = fs.readFileSync(path.join(__dirname, "configs.json"));
         return JSON.parse(configurations);
     } catch (error) {
-        console.error(`There was an error opening configs.json; ${error}`);
+        showErrorMessage({
+            title: "Error",
+            message: `There was an error opening configs.json; ${error}`
+        });
     }
 }
 
-function saveConfigs(configs) {
+function saveConfigs() {
     try {
         fs.writeFileSync("configs.json", JSON.stringify(configs, null, 4), "utf-8");
-        console.log("Configurations saved successfully");
     } catch (error) {
-        console.error(`There was an error saving configurations to configs.json: ${error}`);
+        showErrorMessage({
+            title: "Error",
+            message: `There was an error saving configurations to configs.json: ${error}`
+        });
     }
 }
-
-const configs = loadConfigs();
 
 function getRecentlyOpenedDirectories() {
     const items = [];
     configs["recently-opened"].forEach((path) => {
         items.push({
             label: path,
-            click: () => {
-                startSever(path);
-                mainWindow.webContents.send("opened-directory", {port:port, path: path, ip: getIPAddress()})
+            click: async () => {
+                const port = await startSever(path);
+                const serializedData = {
+                    port: port,
+                    path: path,
+                    ip: getIPAddress()
+                };
+                mainWindow.webContents.send("opened-directory", serializedData)
             }
         })
     })
     return items;
 }
 
+function isPureDigits(str) {
+    const regex = /^\d+$/;
+    return regex.test(str);
+}
 
-app.on("ready", () => {
-    createNewWindow();
+function setTheme(mode) {
+    if (mode.toLowerCase() === "system") {
+        if (nativeTheme.shouldUseDarkColors) {
+            mainWindow.webContents.send("change-theme", "dark");
+            nativeTheme.themeSource = "dark";
+        } else {
+            mainWindow.webContents.send("change-theme", "light");
+            nativeTheme.themeSource = "light";
+        }
+        configs.theme = "system";
+        saveConfigs();
+    } else if (mode.toLowerCase() === "light") {
+        mainWindow.webContents.send("change-theme", "light");
+        nativeTheme.themeSource = "light";
+        configs.theme = "light";
+        saveConfigs();
+    } else if (mode.toLowerCase() === "dark") {
+        mainWindow.webContents.send("change-theme", "dark");
+        nativeTheme.themeSource = "dark";
+        configs.theme = "dark";
+        saveConfigs();
+    } else {
+        showErrorMessage({title: "Failed", message: `There is no such mode: ${mode}`})
+    }
+}
 
-    nativeTheme.themeSource = configs.theme;
-    mainWindow.webContents.send("change-theme", configs.theme);
-
+function makeMainMenu() {
     const template = [
         {
             label: "Server",
@@ -198,7 +313,7 @@ app.on("ready", () => {
                 },
                 {
                     label: "Close",
-                    accelerator: "CmdOrCtrl+X",
+                    accelerator: "CmdOrCtrl+Q",
                     click: () => {
                         closeServer();
                         mainWindow.webContents.send("server-closed");
@@ -207,25 +322,32 @@ app.on("ready", () => {
             ] 
         },
         {
-            label: "Theme",
+            label: "Preferences",
             submenu: [
                 {
-                    label: "Light Mode",
+                    label: "Port",
                     click: () => {
-                        mainWindow.webContents.send("change-theme", "light");
-                        nativeTheme.themeSource = "light";
-                        configs.theme = "light";
-                        saveConfigs(configs);
+                        mainWindow.webContents.send("input-port", configs.port);
                     }
                 },
                 {
-                    label: "Dark Mode",
-                    click: () => {
-                        mainWindow.webContents.send("change-theme", "dark");
-                        nativeTheme.themeSource = "dark";
-                        configs.theme = "dark";
-                        saveConfigs(configs);
-                    }
+                    label: "Theme",
+                    submenu: [
+                        {
+                            label: "System",
+                            click: () => {setTheme("system")}
+                        },
+                        {
+                            label: "Light Mode",
+                            accelerator: "CmdOrCtrl+L",
+                            click: () => {setTheme("light")}
+                        },
+                        {
+                            label: "Dark Mode",
+                            accelerator: "CmdOrCtrl+D",
+                            click: () => {setTheme("dark")}
+                        }
+                    ]
                 }
             ]
         },
@@ -234,6 +356,7 @@ app.on("ready", () => {
             submenu: [
                 {
                     label: "About",
+                    accelerator: "CmdOrCtrl+A",
                     click: () => {
                         shell.openExternal("https://github.com/0m0g1/fileserver");
                     }
@@ -251,6 +374,17 @@ app.on("ready", () => {
     
     const menu = Menu.buildFromTemplate(template);
     Menu.setApplicationMenu(menu);
+}
+
+
+app.on("ready", () => {
+    createNewWindow();
+
+    mainWindow.webContents.on("dom-ready", () => {
+        setTheme(configs.theme);
+    });
+
+    makeMainMenu();
 })
 
 
