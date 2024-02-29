@@ -1,5 +1,5 @@
 {
-  "name": "fileserver",
+  "name": "fileserver0",
   "version": "1.0.0",
   "description": "This is a fileserver built with nodejs and electronjs",
   "main": "src/index.js",
