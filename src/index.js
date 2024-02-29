@@ -5,15 +5,20 @@
 */
 
 //imports
+const {app, BrowserWindow, ipcMain, dialog, Menu, nativeTheme, shell} = require("electron"); // creates the app
+if (require('electron-squirrel-startup')) app.quit(); //stop the app from launching multiple times
+
 const fs = require("fs"); // reading files
 const os = require("os"); // getting ip addresses
 const express = require("express"); // handles server routing
 const path = require("path"); // handles looking at paths
-const {app, BrowserWindow, ipcMain, dialog, Menu, nativeTheme, shell} = require("electron"); // creates the app
 const { default: axios } = require("axios"); // http request to get update status
 
-const configs =  loadConfigs(); // get the users preferences and configurations
+
+// Constants
 const serverAPI = express(); // the server app
+const userDataPath = path.join(app.getPath("userData"), "configs.json"); // place to store user preferences
+const configs = loadConfigs(); // get the users preferences and configurations
 const networkingInterfaces = os.networkInterfaces(); // the devices network addresses
 
 serverAPI.set("views", path.join(__dirname, "views")); // set the path of the veiws or html and ejs pages
@@ -297,8 +302,20 @@ function closeServer() { // close the server
 }
 
 function loadConfigs() { // load the user's preferences (configs.json)
-    try {
+    if (!fs.existsSync(userDataPath)) {
         const configurations = fs.readFileSync(path.join(__dirname, "configs.json"));
+        const loadedConfigs = JSON.parse(configurations);
+        try {
+            fs.writeFileSync(userDataPath, JSON.stringify(loadedConfigs, null, 2), "utf-8");
+        } catch (error) {
+            showErrorMessage({
+                title: "Error",
+                message: `There was an error creating configs.json: ${error}`
+            });
+        }
+    }
+    try {
+        const configurations = fs.readFileSync(userDataPath);
         const loadedConfigs = JSON.parse(configurations);
         if (!loadedConfigs.hasOwnProperty("recently-opened")) {
             loadedConfigs["recently-opened"] = [];
@@ -314,8 +331,7 @@ function loadConfigs() { // load the user's preferences (configs.json)
 
 function saveConfigs() { // save the user's preferences (configs.json)
     try {
-        const configsFilePath = path.join(__dirname, "configs.json");
-        fs.writeFileSync(configsFilePath, JSON.stringify(configs, null, 2), "utf-8");
+        fs.writeFileSync(userDataPath, JSON.stringify(configs, null, 2), "utf-8");
     } catch (error) {
         showErrorMessage({
             title: "Error",

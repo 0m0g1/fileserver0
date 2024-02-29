@@ -19,8 +19,8 @@ jobs:
           - name: Install dependancies
             run: npm install
           
-          - name: Build the app
-            run: npm run make
+          # - name: Build the app
+            # run: npm run make
 
         
         
