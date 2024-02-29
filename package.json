@@ -11,7 +11,7 @@
   },
   "keywords": [],
   "author": "0m0g1",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "axios": "^1.6.7",
     "ejs": "^3.1.9",

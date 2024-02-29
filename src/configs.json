@@ -1,7 +1,9 @@
 {
   "theme": "system",
   "port": "8080",
-  "recently-opened": [],
+  "recently-opened": [
+    "C:\\Users\\omogi\\OneDrive\\Desktop"
+  ],
   "update-status": {
     "current-version": "1.0.0",
     "last-alerted-version": "1.0.0",

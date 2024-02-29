@@ -1,3 +1,9 @@
+/** 
+ * @author 0m0g1
+ * @github 0m0g1
+ * @description "A fileserver"
+*/
+
 //imports
 const fs = require("fs"); // reading files
 const os = require("os"); // getting ip addresses
@@ -64,7 +70,7 @@ const createNewWindow = () => { // function to create new window it sets the glo
 
         saveConfigs();
 
-        showSuccessMessage({
+        showMessage({
             title: "Success",
             message: `Successfully changed port to ${configs.port}`
         });
@@ -103,7 +109,7 @@ const createNewWindow = () => { // function to create new window it sets the glo
                 }
                 configs["update-status"]["alert-count"] += 1;
                 saveConfigs();
-                showSuccessMessage({
+                showMessage({
                     title: "update available",
                     message: `There is a new update available version ${jsonData.updates.version}`
                 });
@@ -115,6 +121,12 @@ const createNewWindow = () => { // function to create new window it sets the glo
 
     mainWindow.loadFile(path.join(__dirname, "views", "index.html"));
 }
+
+/**
+ * Function to get the devices IP address
+ * 
+ * @returns {string} The devices external IP address
+ */
 
 function getIPAddress() { // function to get the devices IP address
     for (const interfaceName in networkingInterfaces) {
@@ -128,17 +140,32 @@ function getIPAddress() { // function to get the devices IP address
     return null;
 }
 
-function showSuccessMessage(message) { // The function used to show any information and success prompts
+/**
+ * Display a popup showing information
+ * 
+ * @param {object} message
+ * @property {string} title - The title of the notification
+ * @property {string} message - The message of the notification
+ */
+
+function showMessage(message) {
     dialog.showMessageBox({
         title: message.title,
         message: message.message
     })
 }
 
+/**
+ * This function is used to display a popup error messages
+ * 
+ * @param {object} message
+ * @property {string} title - The title of the notification
+ * @property {string} message - The message of the notification
+ */
+
 function showErrorMessage(message) { // The function to show any error messages
     dialog.showErrorBox(message.title, message.message)
 }
-
 
 function readDir(dir) { // Reads the path the user chose and checks if its a file or directory and returns every subdirectory in the dir or returns the file
     return new Promise((resolve, reject) => {
@@ -322,8 +349,6 @@ function isPureDigits(str) { // checks if the port is made of only digits
 }
 
 function setTheme(mode) { // Sets and saves the theme 
-    if (configs.theme === mode) return; // if the mode that the user has set is the mode that the app is already in ignore it
-
     if (mode.toLowerCase() === "system") {
         if (nativeTheme.shouldUseDarkColors) {
             mainWindow.webContents.send("change-theme", "dark");
@@ -332,16 +357,24 @@ function setTheme(mode) { // Sets and saves the theme
             mainWindow.webContents.send("change-theme", "light");
             nativeTheme.themeSource = "light";
         }
+
+        if (configs.theme === mode) return; // if the mode that the user has set is the mode that the app is there is no need to save
+        
         configs.theme = "system";
         saveConfigs();
+        
     } else if (mode.toLowerCase() === "light") {
         mainWindow.webContents.send("change-theme", "light");
         nativeTheme.themeSource = "light";
+        
+        if (configs.theme === mode) return;
         configs.theme = "light";
         saveConfigs();
     } else if (mode.toLowerCase() === "dark") {
         mainWindow.webContents.send("change-theme", "dark");
         nativeTheme.themeSource = "dark";
+        
+        if (configs.theme === mode) return;
         configs.theme = "dark";
         saveConfigs();
     } else {
@@ -382,7 +415,13 @@ function makeMainMenu() { // makes the main menu
                     submenu: [
                         {
                             label: "System",
-                            click: () => {setTheme("system")}
+                            click: () => {
+                                setTheme("system");
+                                showMessage({
+                                    title: "Success changing theme mode",
+                                    message: "Restart app to reflect changes"
+                                })
+                            }
                         },
                         {
                             label: "Light Mode",
