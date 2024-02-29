@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master"]
+
+jobs:
+  build:
+      runs-on: [windows-latest, ubuntu-latest, mac-latest]
+      steps: 
+          - name: Checkout code
+            uses: actions/checkout@v2
+            
+          - name: Set up Nodejs
+            uses: actions/setup-node@v2
+            with:
+              node-version: 21.x
+
+          - name: Install dependancies
+            run: npm install
+          
+          - name: Build the app
+            run: npm run make
+
+        
+        

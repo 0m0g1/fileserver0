@@ -1,22 +1,24 @@
-const fs = require("fs");
-const os = require("os");
-const express = require("express");
-const path = require("path");
-const {app, BrowserWindow, ipcMain, dialog, Menu, nativeTheme, shell} = require("electron");
-const { default: axios } = require("axios");
+//imports
+const fs = require("fs"); // reading files
+const os = require("os"); // getting ip addresses
+const express = require("express"); // handles server routing
+const path = require("path"); // handles looking at paths
+const {app, BrowserWindow, ipcMain, dialog, Menu, nativeTheme, shell} = require("electron"); // creates the app
+const { default: axios } = require("axios"); // http request to get update status
 
-const configs =  loadConfigs();
-const serverAPI = express();
-serverAPI.set("views", path.join(__dirname, "views"));
-serverAPI.set("view engine", "ejs");
-const networkingInterfaces = os.networkInterfaces();
+const configs =  loadConfigs(); // get the users preferences and configurations
+const serverAPI = express(); // the server app
+const networkingInterfaces = os.networkInterfaces(); // the devices network addresses
 
-let isServing = false;
+serverAPI.set("views", path.join(__dirname, "views")); // set the path of the veiws or html and ejs pages
+serverAPI.set("view engine", "ejs"); // set the view engine / renderer to ejs
 
-let mainWindow;
+let isServing = false; // holds the status for whether the app is serving a directory
 
-const createNewWindow = () => {
-    mainWindow = new BrowserWindow({
+let mainWindow; // the main app window
+
+const createNewWindow = () => { // function to create new window it sets the global main window variable
+    mainWindow = new BrowserWindow({ // configurations for the main window
         width: 667,
         height: 500,
         resizable: false,
@@ -24,19 +26,19 @@ const createNewWindow = () => {
             nodeIntegration: true,
             contextIsolation: false
         },
-        icon: path.join(__dirname, "assets", "icon.png")
+        icon: path.join(__dirname, "assets", "icon.png") // sets the icon
     });
 
-    mainWindow.webContents.on("dom-ready", () => {
+    mainWindow.webContents.on("dom-ready", () => { // change theme to the users preference set in the config file
         mainWindow.webContents.send("change-theme", configs.theme);
     })
 
-    ipcMain.on("open-directory", (event) => {
-        dialog.showOpenDialog({
+    ipcMain.on("open-directory", (event) => { // when the choose directory button on the ui is pressed it triggers this event
+        dialog.showOpenDialog({ // show the dialog to select the directory to server
             properties: ["openDirectory"],
         })
         .then( async (paths) => {
-            if (!paths.canceled) {
+            if (!paths.canceled) { // if the user has chosen a directory send the data to the ui so it can be updated
                 const path = paths.filePaths[0];
                 const port = await startServer(path);
                 const IP = getIPAddress();
@@ -52,13 +54,13 @@ const createNewWindow = () => {
         })
     })
 
-    ipcMain.on("port-inputed", async (event, newPort) => {
-        if (!isPureDigits(newPort)) {
+    ipcMain.on("port-inputed", async (event, newPort) => { // handles the user changing their prefered port for serving the directory
+        if (!isPureDigits(newPort)) { // shows an error if the port contains any none digit characters
             showErrorMessage({title:"error", message: `There can be no digits in port numbers: ${newPort}`});
             return;
         }
         
-        configs.port = newPort;
+        configs.port = newPort; // changes the configs port to the new port then saves it
 
         saveConfigs();
 
@@ -67,11 +69,11 @@ const createNewWindow = () => {
             message: `Successfully changed port to ${configs.port}`
         });
 
-        if (!isServing) return;
+        if (!isServing) return; // when the port is updated, if you are not serving a directory don't restart the server
         
-        const path = configs["recently-opened"][0];
+        const path = configs["recently-opened"][0]; // reserve the current opened directory when the preffered port is changed
         
-        startServer(path)
+        startServer(path) // restart the server
         .then((port) => {
             const ip = getIPAddress();
             mainWindow.webContents.send("opened-directory", {port:port, path: path, ip: ip});
@@ -86,8 +88,8 @@ const createNewWindow = () => {
 
     })
 
-    ipcMain.on("loader-removed", async () => {
-        try {
+    ipcMain.on("loader-removed", async () => { // checks if there is a new update available when the loader showing the logo is updated
+        try { // if you are able to get the status.json file check if there is a new update and prompt
             const response = await axios.get("https://0m0g1.github.io/fileserver0/status.json");
             const jsonData = response.data;
             if (jsonData.updates.version !== configs["update-status"]["current-version"]) {
@@ -106,7 +108,7 @@ const createNewWindow = () => {
                     message: `There is a new update available version ${jsonData.updates.version}`
                 });
             }
-        } catch (err) {
+        } catch (err) { // do nothing if you are unable to get the update status
             return;
         }
     })
@@ -114,7 +116,7 @@ const createNewWindow = () => {
     mainWindow.loadFile(path.join(__dirname, "views", "index.html"));
 }
 
-function getIPAddress() {
+function getIPAddress() { // function to get the devices IP address
     for (const interfaceName in networkingInterfaces) {
         const interfaceAddress = networkingInterfaces[interfaceName].find((address) => {
             return !address.internal && address.family === "IPv4";
@@ -126,19 +128,19 @@ function getIPAddress() {
     return null;
 }
 
-function showSuccessMessage(message) {
+function showSuccessMessage(message) { // The function used to show any information and success prompts
     dialog.showMessageBox({
         title: message.title,
         message: message.message
     })
 }
 
-function showErrorMessage(message) {
+function showErrorMessage(message) { // The function to show any error messages
     dialog.showErrorBox(message.title, message.message)
 }
 
 
-function readDir(dir) {
+function readDir(dir) { // Reads the path the user chose and checks if its a file or directory and returns every subdirectory in the dir or returns the file
     return new Promise((resolve, reject) => {
         fs.stat(dir, (err, status) => {
             if (err) {
@@ -170,12 +172,12 @@ function readDir(dir) {
 
 let server;
 
-async function startServer(dir) {
-    return readDir(dir)
+async function startServer(dir) { // Handles serving the chosen directory
+    return readDir(dir) // read the directory and get all the subdirectories
         .then((subdirectories) => {
             const port = process.env.PORT || configs.port;
             
-            serverAPI.get("/", (req, res) => {
+            serverAPI.get("/", (req, res) => { // set the "/" route
                 const formattedSubdirectories = subdirectories.map(subdirectory => ({
                     name: subdirectory,
                     path: subdirectory
@@ -183,37 +185,42 @@ async function startServer(dir) {
                 res.render("listing", { directory: { ip: getIPAddress(), port: port, directory: dir, subdirectories: formattedSubdirectories } });
             });
             
-            if (server) {
+            if (server) { // close the server if its running before you start ru
                 server.close();
             }
             
-            server = serverAPI.listen(port, () => {
-                configs["recently-opened"].forEach((recent, i) => {
+            server = serverAPI.listen(port, () => { // run the server on the users prefered port
+                configs["recently-opened"].forEach((recent, i) => { // removes the directory the user chose if its in the recently opened directories it will be added to the top later 
                     if (dir === recent) {
                         configs["recently-opened"].splice(i, 1);
                     }
                 })
 
-                if (configs["recently-opened"].length === 10) {
+                if (configs["recently-opened"].length === 10) { // if the recently opened directories are more than ten remove the last one
                     configs["recently-opened"].pop();
                 }
 
-                configs["recently-opened"].unshift(dir);
+                configs["recently-opened"].unshift(dir); // add the currently chosen directory to the top of the recently opened directories
                 saveConfigs();
                 makeMainMenu();
                 isServing = true;
-                console.log(`Server is running on "http://localhost:${port}/`)
+                // console.log(`Server is running on "http://localhost:${port}/`)
             })
 
-            serverAPI.get("*/favicon.ico", (req, res) => {
+            serverAPI.get("*/favicon.ico", (req, res) => { // send the favicon icon whenever it is accessed
                 res.sendFile(path.join(__dirname, "assets", "favicon.ico"));
             })
 
-            serverAPI.get("/:path(*)", (req, res) => {
+            serverAPI.get("/:path(*)", (req, res) => { // serve every path that comes after "/"
                 
                 let requestedPath = path.join(dir, req.params.path);
+                /*  
+                    add the subdirectory the user wants to get to, to the root directory so you can get the full path to the directory
+                    for example 
+                    "C://dev" + "/projects"
+                */
 
-                fs.stat(requestedPath, async (err, stats) => {
+                fs.stat(requestedPath, async (err, stats) => { // check if the requested path is a directory or file
                     if (err) {
                         showErrorMessage({
                             title: "Error",
@@ -226,18 +233,19 @@ async function startServer(dir) {
                         return;
                     }
 
-                    if (!stats.isDirectory()) {
+                    if (!stats.isDirectory()) { // send the file if its not a directory
                         res.sendFile(requestedPath);
                     }
 
-                    const subSubDirectories = await readDir(requestedPath);
+                    const subSubDirectories = await readDir(requestedPath); // get all of the subdirectories and files in the subdirectory
                     
-                    const subDirectoriesWithPath = subSubDirectories.map(subdirectory => ({
+                    const subDirectoriesWithPath = subSubDirectories.map(subdirectory => ({ // adds the current sub sub directory to the subdirectory to get the list of all the files and directories in the dir
                             name: subdirectory,
                             path: path.join(req.params.path, subdirectory)
                         })
                     );
-
+                    
+                    // rendre the listing view (listing.ejs) with the current directory and subdirectories
                     res.render("listing", {directory : {ip: getIPAddress(), port: port, directory: requestedPath, subdirectories: subDirectoriesWithPath}});
                 })
                 
@@ -245,7 +253,7 @@ async function startServer(dir) {
 
             return port;
         })
-        .catch((err) => {
+        .catch((err) => { // show an error message if there is a problem opening the directory
             showErrorMessage({
                 title: "Error",
                 message: `There was an error reading "${dir}: ${err}`
@@ -253,7 +261,7 @@ async function startServer(dir) {
         })
 }
 
-function closeServer() {
+function closeServer() { // close the server
     if (server) {
         mainWindow.webContents.send("database-closed");
         server.close();
@@ -261,7 +269,7 @@ function closeServer() {
     }
 }
 
-function loadConfigs() {
+function loadConfigs() { // load the user's preferences (configs.json)
     try {
         const configurations = fs.readFileSync(path.join(__dirname, "configs.json"));
         const loadedConfigs = JSON.parse(configurations);
@@ -277,7 +285,7 @@ function loadConfigs() {
     }
 }
 
-function saveConfigs() {
+function saveConfigs() { // save the user's preferences (configs.json)
     try {
         const configsFilePath = path.join(__dirname, "configs.json");
         fs.writeFileSync(configsFilePath, JSON.stringify(configs, null, 2), "utf-8");
@@ -289,8 +297,8 @@ function saveConfigs() {
     }
 }
 
-function getRecentlyOpenedDirectories() {
-    const items = [];
+function getRecentlyOpenedDirectories() { // get a list of all the recently opened directories and add them to the main menu
+    const items = []; // items to add to the main menu
     configs["recently-opened"].forEach((path) => {
         items.push({
             label: path,
@@ -308,12 +316,14 @@ function getRecentlyOpenedDirectories() {
     return items;
 }
 
-function isPureDigits(str) {
+function isPureDigits(str) { // checks if the port is made of only digits
     const regex = /^\d+$/;
     return regex.test(str);
 }
 
-function setTheme(mode) {
+function setTheme(mode) { // Sets and saves the theme 
+    if (configs.theme === mode) return; // if the mode that the user has set is the mode that the app is already in ignore it
+
     if (mode.toLowerCase() === "system") {
         if (nativeTheme.shouldUseDarkColors) {
             mainWindow.webContents.send("change-theme", "dark");
@@ -339,7 +349,7 @@ function setTheme(mode) {
     }
 }
 
-function makeMainMenu() {
+function makeMainMenu() { // makes the main menu
     const template = [
         {
             label: "Server",
@@ -394,7 +404,7 @@ function makeMainMenu() {
                 {
                     label: "About",
                     accelerator: "CmdOrCtrl+A",
-                    click: () => {
+                    click: () => { // opens the documentation in the apps github repo
                         shell.openExternal("https://github.com/0m0g1/fileserver");
                     }
                 }
@@ -417,7 +427,7 @@ function makeMainMenu() {
 app.on("ready", () => {
     createNewWindow();
 
-    mainWindow.webContents.on("dom-ready", () => {
+    mainWindow.webContents.on("dom-ready", () => { // set the theme to the user's preference when the app starts
         setTheme(configs.theme);
     });
 
@@ -425,7 +435,7 @@ app.on("ready", () => {
 })
 
 
-app.on("window-all-closed", () => {
+app.on("window-all-closed", () => { // close the app
     if (process.platform !== "darwin") {
         app.quit();
     }
