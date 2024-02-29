@@ -3,6 +3,7 @@ const os = require("os");
 const express = require("express");
 const path = require("path");
 const {app, BrowserWindow, ipcMain, dialog, Menu, nativeTheme, shell} = require("electron");
+const { default: axios } = require("axios");
 
 const configs =  loadConfigs();
 const serverAPI = express();
@@ -83,6 +84,31 @@ const createNewWindow = () => {
             });
         })
 
+    })
+
+    ipcMain.on("loader-removed", async () => {
+        try {
+            const response = await axios.get("https://0m0g1.github.io/fileserver0/status.json");
+            const jsonData = response.data;
+            if (jsonData.updates.version !== configs["update-status"]["current-version"]) {
+                if (configs["update-status"]["alert-count"] >= 3) {
+                    if (configs["update-status"]["last-alerted-version"] !== jsonData.updates.version) {
+                        configs["update-status"]["last-alerted-version"] = jsonData.updates.version;
+                        configs["update-status"]["alert-count"] = 0;
+                        saveConfigs();
+                    }
+                    return;
+                }
+                configs["update-status"]["alert-count"] += 1;
+                saveConfigs();
+                showSuccessMessage({
+                    title: "update available",
+                    message: `There is a new update available version ${jsonData.updates.version}`
+                });
+            }
+        } catch (err) {
+            return;
+        }
     })
 
     mainWindow.loadFile(path.join(__dirname, "views", "index.html"));

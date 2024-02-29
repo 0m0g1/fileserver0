@@ -1,5 +1,10 @@
 {
   "theme": "system",
   "port": "8080",
-  "recently-opened": []
+  "recently-opened": [],
+  "update-status": {
+    "current-version": "1.0.0",
+    "last-alerted-version": "1.0.0",
+    "alert-count": 0
+  }
 }

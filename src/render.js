@@ -10,6 +10,7 @@ const prompt = require("native-prompt");
 
 setTimeout(() => {
     loader.style.display = "none";
+    ipcRenderer.send("loader-removed");
 }, 3200)
 
 openDialogBtn.onclick = () => {
@@ -63,4 +64,4 @@ ipcRenderer.on("input-port", async (event, currentPort) => {
 
 ipcRenderer.on("there-was-an-error", (event, error) => {
     alert(error);
-})
+});
